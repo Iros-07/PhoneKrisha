@@ -1,164 +1,213 @@
-package com.example.phon_krisha.profile
+package com.example.phon_krisha.screens.profile
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.phon_krisha.currentUserId
-import com.example.phon_krisha.network.ApiClient
-import com.example.phon_krisha.network.UserRegisterRequest
-import com.example.phon_krisha.network.LoginRequest
+import androidx.navigation.NavHostController
+import com.example.phon_krisha.apistate.AuthState
+import com.example.phon_krisha.network.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import androidx.compose.ui.graphics.Color
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ProfileScreen() {
-    val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
 
-    var isRegister by remember { mutableStateOf(true) }  // true = регистрация, false = вход
+@Composable
+fun ProfileScreen(navController: NavHostController) {
+
+    // ✅ Правильно получаем ID
+    val loggedInUserId by AuthState.currentUserId
+    val userId = loggedInUserId  // ← локальная копия для smart cast
+
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var user by remember { mutableStateOf<User?>(null) }
+    var myAds by remember { mutableStateOf<List<Ad>>(emptyList()) }
+    var isEditing by remember { mutableStateOf(false) }
+
     var fio by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    var error by remember { mutableStateOf("") }
-    var success by remember { mutableStateOf("") }
+    var isLoginMode by remember { mutableStateOf(true) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = if (isRegister) "Регистрация" else "Вход",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        if (isRegister) {
-            OutlinedTextField(
-                value = fio,
-                onValueChange = { fio = it },
-                label = { Text("ФИО") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = phone,
-                onValueChange = { if (it.all { char -> char.isDigit() || char == '+' || char == ' ' || char == '(' || char == ')' || char == '-' }) phone = it },
-                label = { Text("Телефон") },
-                placeholder = { Text("+7 (XXX) XXX-XX-XX") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(16.dp))
+    // 🔄 Загружаем профиль при логине
+    LaunchedEffect(userId) {
+        if (userId != null) {
+            try {
+                user = ApiClient.api.getUser(userId)
+                fio = user?.fio ?: ""
+                phone = user?.phone ?: ""
+                email = user?.email ?: ""
+                myAds = ApiClient.api.getAds().filter { it.user_id == userId }
+            } catch (_: Exception) {}
         }
+    }
 
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Пароль") },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(24.dp))
-
-        if (error.isNotEmpty()) {
-            Text(error, color = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (success.isNotEmpty()) {
-            Text(success, color = Color.Green)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Button(
-            onClick = {
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            if (isRegister) {
-                                if (fio.isBlank() || phone.isBlank() || email.isBlank() || password.isBlank()) {
-                                    error = "Заполните все поля"
-                                    success = ""
-                                    return@withContext
-                                }
-                                val response = ApiClient.instance.register(
-                                    UserRegisterRequest(fio, phone, email, password)
-                                )
+    if (userId == null) {
+        // ================== АВТОРИЗАЦИЯ ==================
+        Column(modifier = Modifier.padding(24.dp)) {
+            if (isLoginMode) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Пароль") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                val response = ApiClient.api.login(LoginRequest(email, password))
                                 if (response.id != null) {
-                                    currentUserId.value = response.id
-                                    success = "Регистрация успешна! ID: ${response.id}"
-                                    error = ""
-                                } else {
-                                    error = response.error ?: "Ошибка регистрации"
-                                    success = ""
+                                    AuthState.saveUserId(context, response.id)
                                 }
-                            } else {
-                                if (email.isBlank() || password.isBlank()) {
-                                    error = "Введите email и пароль"
-                                    success = ""
-                                    return@withContext
-                                }
-                                val response = ApiClient.instance.login(
-                                    LoginRequest(email, password)
-                                )
+                            } catch (_: Exception) {}
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Войти")
+                }
+                Spacer(Modifier.height(16.dp))
+                TextButton(
+                    onClick = { isLoginMode = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Нет аккаунта? Зарегистрироваться")
+                }
+            } else {
+                // ================== РЕГИСТРАЦИЯ ==================
+                OutlinedTextField(value = fio, onValueChange = { fio = it }, label = { Text("ФИО") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Телефон") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Пароль") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                val response = ApiClient.api.register(UserRegisterRequest(fio, phone, email, password))
                                 if (response.id != null) {
-                                    currentUserId.value = response.id
-                                    success = "Вход успешный! ID: ${response.id}"
-                                    error = ""
-                                } else {
-                                    error = response.error ?: "Неверный email или пароль"
-                                    success = ""
+                                    AuthState.saveUserId(context, response.id)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Зарегистрироваться")
+                }
+                Spacer(Modifier.height(16.dp))
+                TextButton(
+                    onClick = { isLoginMode = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Уже есть аккаунт? Войти")
+                }
+            }
+        }
+    } else {
+        // ================== ПРОФИЛЬ ==================
+        Column(modifier = Modifier.padding(24.dp)) {
+            if (isEditing) {
+                OutlinedTextField(value = fio, onValueChange = { fio = it }, label = { Text("ФИО") })
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Телефон") })
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") })
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Новый пароль (если нужно)") })
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                ApiClient.api.updateUser(
+                                    userId,
+                                    UpdateUserRequest(
+                                        fio = fio,
+                                        phone = phone,
+                                        email = email,
+                                        password = password.takeIf { it.isNotBlank() }
+                                    )
+                                )
+                                isEditing = false
+                                user = ApiClient.api.getUser(userId)
+                            } catch (_: Exception) {}
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Сохранить")
+                }
+            } else {
+                user?.let {
+                    Text("ФИО: ${it.fio}", style = MaterialTheme.typography.titleMedium)
+                    Text("Телефон: ${it.phone}")
+                    Text("Email: ${it.email}")
+                    Spacer(Modifier.height(16.dp))
+                    Button(onClick = { isEditing = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Редактировать профиль")
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                AuthState.clearUserId(context)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Выйти")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+            Text("Мои объявления", style = MaterialTheme.typography.titleLarge)
+
+            LazyColumn {
+                items(myAds) { ad ->
+                    Card(modifier = Modifier.padding(vertical = 8.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(ad.title, style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            Row {
+                                Button(onClick = { navController.navigate("edit_ad/${ad.id}") }) {
+                                    Text("Изменить")
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            try {
+                                                ApiClient.api.deleteAd(ad.id)
+                                                myAds = myAds.filter { it.id != ad.id }
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
+                                ) {
+                                    Text("Удалить")
                                 }
                             }
-                        } catch (e: Exception) {
-                            error = "Нет соединения с сервером"
-                            success = ""
                         }
                     }
                 }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (isRegister) "Зарегистрироваться" else "Войти")
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        TextButton(onClick = {
-            isRegister = !isRegister
-            error = ""
-            success = ""
-        }) {
-            Text(if (isRegister) "Уже есть аккаунт? Войти" else "Нет аккаунта? Зарегистрироваться")
-        }
-
-        if (currentUserId.value != null) {
-            Spacer(Modifier.height(32.dp))
-            Text("Вы вошли как пользователь ID: ${currentUserId.value}")
-            Button(onClick = { currentUserId.value = null }) {
-                Text("Выйти")
             }
         }
     }
