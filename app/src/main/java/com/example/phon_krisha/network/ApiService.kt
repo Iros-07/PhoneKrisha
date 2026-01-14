@@ -1,20 +1,14 @@
-// File: app/src/main/kotlin/com/example/phon_krisha/network/
+// Updated: app/src/main/kotlin/com/example/phon_krisha/network/ApiService.kt
 package com.example.phon_krisha.network
 
+import okhttp3.MultipartBody
 import retrofit2.http.*
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-// Data classes
 data class UserRegisterRequest(val fio: String, val phone: String, val email: String, val password: String)
 data class LoginRequest(val email: String, val password: String)
-data class AuthResponse(
-    val id: Int?,
-    val fio: String? = null,
-    val phone: String? = null,
-    val email: String? = null,
-    val error: String? = null
-)
+data class AuthResponse(val id: Int?, val fio: String? = null, val phone: String? = null, val email: String? = null, val error: String? = null)
 
 data class User(val id: Int, val fio: String, val phone: String, val email: String)
 
@@ -25,7 +19,7 @@ data class Ad(
     val user_id: Int = 0,
     val rooms: Int = 0,
     val city: String = "",
-    val photo: String? = null,
+    val photos: List<String>? = null, // Изменено на список строк
     val price: Long = 0,
     val ad_type: String = "",
     val house_type: String = "",
@@ -33,7 +27,9 @@ data class Ad(
     val floors_in_house: Int = 0,
     val year_built: Int = 0,
     val area: Double = 0.0,
-    val complex: String? = null
+    val complex: String? = null,
+    val user_fio: String? = null,
+    val user_phone: String? = null
 )
 
 data class Message(
@@ -55,14 +51,13 @@ data class ChatPartner(
     val timestamp: String? = null
 )
 
-// В файле network (например  или прямо в ApiService.kt)
-
 data class UpdateUserRequest(
     val fio: String,
     val phone: String,
     val email: String,
-    val password: String? = null // null = не менять пароль
+    val password: String? = null
 )
+
 interface ApiService {
 
     @POST("register")
@@ -76,8 +71,20 @@ interface ApiService {
 
     @GET("ads")
     suspend fun getAds(
+        @Query("title") title: String? = null,
         @Query("city") city: String? = null,
-        @Query("rooms") rooms: Int? = null
+        @Query("rooms") rooms: Int? = null,
+        @Query("price_min") price_min: Long? = null,
+        @Query("price_max") price_max: Long? = null,
+        @Query("ad_type") ad_type: String? = null,
+        @Query("house_type") house_type: String? = null,
+        @Query("floor_min") floor_min: Int? = null,
+        @Query("floor_max") floor_max: Int? = null,
+        @Query("year_built_min") year_built_min: Int? = null,
+        @Query("year_built_max") year_built_max: Int? = null,
+        @Query("area_min") area_min: Double? = null,
+        @Query("area_max") area_max: Double? = null,
+        @Query("complex") complex: String? = null
     ): List<Ad>
 
     @GET("ads/{ad_id}")
@@ -108,20 +115,18 @@ interface ApiService {
     suspend fun sendMessage(@Body request: SendMessageRequest): Map<String, Any>
 
     @PUT("user/{user_id}")
-    suspend fun updateUser(
-        @Path("user_id") userId: Int,
-        @Body request: UpdateUserRequest
-    ): Any // или Map<String, Any>, или ваш тип ответа (status, error и т.д.)
+    suspend fun updateUser(@Path("user_id") userId: Int, @Body request: UpdateUserRequest): Any
 
     @GET("chats/{user_id}")
     suspend fun getChats(@Path("user_id") userId: Int): List<ChatPartner>
 
+    @Multipart
+    @POST("upload_photo")
+    suspend fun uploadPhoto(@Part photo: MultipartBody.Part): Map<String, String>
 }
 
-
-
 object ApiClient {
-    private const val BASE_URL = "http://10.54.4.41:5000/"
+    private const val BASE_URL = "http://10.246.12.41:5000/"
 
     val api: ApiService by lazy {
         Retrofit.Builder()

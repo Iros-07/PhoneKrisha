@@ -2,16 +2,16 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.compose.compiler)
 }
 
 android {
     namespace = "com.example.phon_krisha"
-    compileSdk = 35 // ← Android 15 / API 35 — рекомендуется на 2026
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.phon_krisha"
-        minSdk = 26 // ← 26 — хороший современный минимум
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -22,14 +22,12 @@ android {
         }
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
+    buildFeatures {
+        compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
     }
 
     compileOptions {
@@ -37,8 +35,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        jvmToolchain(17)
     }
 
     buildFeatures {
@@ -46,41 +44,51 @@ android {
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.kotlin.get()
+        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
+    }
+
+    // Добавьте этот блок (если его ещё нет)
+    kotlinOptions {
+        freeCompilerArgs += listOf(
+            "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api"
+        )
     }
 }
 
 dependencies {
-    // Compose BOM — управляет всеми версиями Compose библиотек
-    implementation(platform(libs.androidx.compose.bom))
+    val composeBom = platform(libs.androidx.compose.bom)
+    implementation(composeBom)
+    androidTestImplementation(composeBom)
 
-    // Основные Compose зависимости (без версий — берутся из BOM)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.extended)
-
-    // Дебаг-инструменты
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.animation)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // Activity + Navigation
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.navigation.compose)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 
-    // Core + Lifecycle
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    // Retrofit + Coroutines
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.coil.compose)
+
     implementation(libs.retrofit)
-    implementation(libs.retrofit.gson)
-    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp.logging.interceptor)
+
     implementation(libs.kotlinx.coroutines.android)
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("io.coil-kt:coil-compose:2.7.0")
-    // Тесты
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    implementation(libs.kotlinx.coroutines.core)
+
+    implementation(libs.androidx.datastore.preferences)
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.espresso.core)
 }

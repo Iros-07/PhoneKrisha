@@ -1,58 +1,99 @@
+// Updated: app/src/main/kotlin/com/example/phon_krisha/messages/MessagesScreen.kt
 package com.example.phon_krisha.messages
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.example.phon_krisha.apistate.AuthState
 import com.example.phon_krisha.network.ApiClient
 import com.example.phon_krisha.network.ChatPartner
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessagesScreen(
     currentUserId: Int,
-    onChatClick: (Int) -> Unit
+    onChatClick: (Int) -> Unit,
+    navController: NavController
 ) {
+    val scope = rememberCoroutineScope()
     var partners by remember { mutableStateOf<List<ChatPartner>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        try {
-            partners = ApiClient.api.getChats(currentUserId) ?: emptyList()
-        } catch (_: Exception) {
-            partners = emptyList()
-        } finally {
+        if (!AuthState.isGuest) {
+            try {
+                partners = ApiClient.api.getChats(currentUserId) ?: emptyList()
+            } catch (e: Exception) {
+                partners = emptyList()
+            } finally {
+                isLoading = false
+            }
+        } else {
             isLoading = false
         }
     }
 
-    if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Сообщения") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                }
+            )
         }
-        return
-    }
-
-    if (partners.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Нет сообщений")
+    ) { padding ->
+        if (AuthState.isGuest) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                TextButton(onClick = { navController.navigate("profile") }) {
+                    Text("Гости не могут использовать сообщения. Войдите в аккаунт.", color = Color.Gray, textAlign = TextAlign.Center)
+                }
+            }
+            return@Scaffold
         }
-        return
-    }
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        items(partners) { partner ->
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                onClick = { onChatClick(partner.partner_id) }
-            ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    Text(partner.partner_name?.ifBlank { "Пользователь" } ?: "Пользователь")
-                    Text(partner.message?.ifBlank { "Сообщений нет" } ?: "Сообщений нет")
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            items(partners) { partner ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    onClick = { onChatClick(partner.partner_id) }
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = partner.partner_name?.ifBlank { "Пользователь" } ?: "Пользователь",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
+                        Text(
+                            text = partner.message?.ifBlank { "Нет сообщений" } ?: "Нет сообщений",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
+                    }
                 }
             }
         }

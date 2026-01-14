@@ -16,9 +16,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        gradlePluginPortal()               // ← важно для toolchain
+        maven("https://maven.google.com")
     }
 }
 
 rootProject.name = "phon-krisha"
 include(":app")
- 
