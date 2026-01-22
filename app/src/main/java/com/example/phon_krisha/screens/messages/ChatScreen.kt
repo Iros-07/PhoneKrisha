@@ -1,7 +1,6 @@
-// Updated: app/src/main/kotlin/com/example/phon_krisha/messages/ChatScreen.kt
+// ChatScreen.kt
 package com.example.phon_krisha.messages
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,18 +20,12 @@ import com.example.phon_krisha.apistate.AuthState
 import com.example.phon_krisha.network.ApiClient
 import com.example.phon_krisha.network.Message
 import com.example.phon_krisha.network.SendMessageRequest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Camera
 
 @OptIn(ExperimentalMaterial3Api::class)
-// Основные улучшения в ChatScreen.kt
-
-// 1. Убираем выравнивание по центру для пустого состояния
-// 2. Делаем более естественное поведение при отсутствии сообщений
-// 3. Добавляем небольшой отступ снизу у списка сообщений
-// 4. Улучшаем стили баблов и общий вид
-
 @Composable
 fun ChatScreen(
     currentUserId: Int,
@@ -46,85 +39,103 @@ fun ChatScreen(
     var newMessageText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
 
-    // ... (проверка гостя и LaunchedEffect остаются без изменений)
+    if (AuthState.isGuest || currentUserId <= 0) {
+        Scaffold(topBar = {
+            TopAppBar(
+                title = { Text("Чат") },
+                navigationIcon = { IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                } }
+            )
+        }) { padding ->
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                TextButton(onClick = { navController.navigate("profile") }) {
+                    Text("Гости не могут писать сообщения.\nВойдите в аккаунт.", textAlign = TextAlign.Center)
+                }
+            }
+        }
+        return
+    }
+
+    // Автообновление сообщений каждые 4 секунды
+    LaunchedEffect(toUserId) {
+        while (true) {
+            try {
+                messages = ApiClient.api.getMessages(currentUserId, toUserId)
+            } catch (_: Exception) {}
+            isLoading = false
+            delay(4000L)
+        }
+    }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.lastIndex)
+        }
+    }
 
     Scaffold(
-        topBar = { /* без изменений */ },
-        modifier = Modifier.fillMaxSize()
+        topBar = {
+            TopAppBar(
+                title = { Text("Чат") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                }
+            )
+        }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            // Область сообщений
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             Box(modifier = Modifier.weight(1f)) {
                 when {
-                    isLoading -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.Center)
-                        )
-                    }
-
+                    isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                     messages.isEmpty() -> {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 32.dp),
+                                .padding(32.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CalendarToday,
+                                Icons.Default.Camera,
                                 contentDescription = null,
-                                modifier = Modifier.size(72.dp),
+                                modifier = Modifier.size(80.dp),
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                             )
-                            Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(Modifier.height(24.dp))
                             Text(
-                                "Сообщений пока нет",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface
+                                "Пока здесь тихо…",
+                                style = MaterialTheme.typography.headlineSmall
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(Modifier.height(12.dp))
                             Text(
-                                "Напишите первое сообщение собеседнику",
+                                "Напишите первое сообщение!",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
-
                     else -> {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 8.dp)
-                                .padding(bottom = 8.dp),          // ← небольшой отступ снизу
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
                             verticalArrangement = Arrangement.Bottom,
-                            contentPadding = PaddingValues(
-                                bottom = 8.dp,
-                                top = 8.dp
-                            )
+                            contentPadding = PaddingValues(bottom = 12.dp)
                         ) {
-                            items(messages) { message ->
-                                MessageBubble(
-                                    message = message,
-                                    isOwnMessage = message.from_user_id == currentUserId
-                                )
+                            items(messages) { msg ->
+                                MessageBubble(msg, msg.from_user_id == currentUserId)
                             }
                         }
                     }
                 }
             }
 
-            // Поле ввода — делаем чуть красивее и современнее
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                shadowElevation = 4.dp
+                tonalElevation = 2.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -144,8 +155,7 @@ fun ChatScreen(
                         colors = TextFieldDefaults.colors(
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                         )
                     )
 
@@ -156,28 +166,25 @@ fun ChatScreen(
                                     try {
                                         ApiClient.api.sendMessage(
                                             SendMessageRequest(
-                                                from_user_id = currentUserId,
-                                                to_user_id = toUserId,
-                                                message = newMessageText.trim()
+                                                currentUserId,
+                                                toUserId,
+                                                newMessageText.trim()
                                             )
                                         )
-                                        messages = ApiClient.api.getMessages(currentUserId, toUserId)
                                         newMessageText = ""
-                                    } catch (e: Exception) {
-                                        // можно добавить snackbar с ошибкой
-                                    }
+                                    } catch (_: Exception) {}
                                 }
                             }
                         },
                         enabled = newMessageText.isNotBlank()
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Отправить",
                             tint = if (newMessageText.isNotBlank())
                                 MaterialTheme.colorScheme.primary
                             else
-                                MaterialTheme.colorScheme.outlineVariant
+                                MaterialTheme.colorScheme.outline
                         )
                     }
                 }
@@ -185,58 +192,39 @@ fun ChatScreen(
         }
     }
 }
+
 @Composable
-private fun MessageBubble(
-    message: Message,
-    isOwnMessage: Boolean
-) {
-    val backgroundColor = if (isOwnMessage)
-        MaterialTheme.colorScheme.primaryContainer
-    else
-        MaterialTheme.colorScheme.surfaceVariant
-
-    val textColor = if (isOwnMessage)
-        MaterialTheme.colorScheme.onPrimaryContainer
-    else
-        MaterialTheme.colorScheme.onSurfaceVariant
-
+private fun MessageBubble(message: Message, isOwn: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = if (isOwnMessage) Arrangement.End else Arrangement.Start
+            .padding(vertical = 2.dp),
+        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start
     ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .background(
-                    color = backgroundColor,
-                    shape = RoundedCornerShape(
-                        topStart = 16.dp,
-                        topEnd = 16.dp,
-                        bottomStart = if (isOwnMessage) 16.dp else 4.dp,
-                        bottomEnd = if (isOwnMessage) 4.dp else 16.dp
-                    )
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+        Surface(
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomStart = if (isOwn) 16.dp else 4.dp,
+                bottomEnd = if (isOwn) 4.dp else 16.dp
+            ),
+            color = if (isOwn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.widthIn(max = 300.dp)
         ) {
-            Text(
-                text = message.message,
-                color = textColor,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Start
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = message.timestamp?.take(16) ?: "",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.End
-            )
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(
+                    message.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isOwn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    message.timestamp?.take(16) ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.align(Alignment.End)
+                )
+            }
         }
     }
 }

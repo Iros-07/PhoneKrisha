@@ -1,4 +1,4 @@
-// Updated: app/src/main/kotlin/com/example/phon_krisha/screens/favorites/FavoritesScreen.kt
+// FavoritesScreen.kt
 package com.example.phon_krisha.screens.favorites
 
 import androidx.compose.foundation.layout.*
@@ -17,6 +17,8 @@ import androidx.navigation.NavController
 import com.example.phon_krisha.apistate.AuthState
 import com.example.phon_krisha.network.ApiClient
 import com.example.phon_krisha.network.Ad
+import com.example.phon_krisha.network.RemoveFavoriteRequest
+import com.example.phon_krisha.screens.home.AdCard
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,32 +74,31 @@ fun FavoritesScreen(
             return@Scaffold
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+        ) {
             items(favorites) { ad ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(4.dp),
-                    onClick = { onAdClick(ad.id) }
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
-                            ad.title.ifBlank { "Без названия" },
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Start
-                        )
-                        Text(
-                            "Цена: ${ad.price ?: 0}",
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Start
-                        )
-                        Text(
-                            "Город: ${ad.city.ifBlank { "Не указан" }}",
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Start
-                        )
-                    }
-                }
+                AdCard(
+                    ad = ad,
+                    isFavorite = true,
+                    onClick = { onAdClick(ad.id) },
+                    onFavoriteClick = {
+                        scope.launch {
+                            try {
+                                ApiClient.api.removeFavorite(
+                                    RemoveFavoriteRequest(userId, ad.id)
+                                )
+                                favorites = favorites.filter { it.id != ad.id }
+                            } catch (e: Exception) {
+                            }
+                        }
+                    },
+                    showFavoriteButton = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }

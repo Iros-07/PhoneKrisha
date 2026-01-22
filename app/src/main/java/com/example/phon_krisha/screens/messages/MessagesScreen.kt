@@ -1,4 +1,4 @@
-// Updated: app/src/main/kotlin/com/example/phon_krisha/messages/MessagesScreen.kt
+// MessagesScreen.kt
 package com.example.phon_krisha.messages
 
 import androidx.compose.foundation.layout.*
@@ -17,7 +17,7 @@ import androidx.navigation.NavController
 import com.example.phon_krisha.apistate.AuthState
 import com.example.phon_krisha.network.ApiClient
 import com.example.phon_krisha.network.ChatPartner
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,16 +31,17 @@ fun MessagesScreen(
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        if (!AuthState.isGuest) {
-            try {
-                partners = ApiClient.api.getChats(currentUserId) ?: emptyList()
-            } catch (e: Exception) {
-                partners = emptyList()
-            } finally {
-                isLoading = false
+        while (true) {
+            if (!AuthState.isGuest) {
+                try {
+                    partners = ApiClient.api.getChats(currentUserId) ?: emptyList()
+                } catch (e: Exception) {
+                    // silent fail
+                } finally {
+                    isLoading = false
+                }
             }
-        } else {
-            isLoading = false
+            delay(8000L)
         }
     }
 
@@ -59,7 +60,11 @@ fun MessagesScreen(
         if (AuthState.isGuest) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 TextButton(onClick = { navController.navigate("profile") }) {
-                    Text("Гости не могут использовать сообщения. Войдите в аккаунт.", color = Color.Gray, textAlign = TextAlign.Center)
+                    Text(
+                        "Гости не могут использовать сообщения.\nВойдите в аккаунт.",
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
             return@Scaffold
@@ -72,26 +77,29 @@ fun MessagesScreen(
             return@Scaffold
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
             items(partners) { partner ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 6.dp),
                     onClick = { onChatClick(partner.partner_id) }
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = partner.partner_name?.ifBlank { "Пользователь" } ?: "Пользователь",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Start
+                            style = MaterialTheme.typography.titleMedium
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = partner.message?.ifBlank { "Нет сообщений" } ?: "Нет сообщений",
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Start
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

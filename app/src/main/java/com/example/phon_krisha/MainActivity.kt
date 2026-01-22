@@ -1,4 +1,4 @@
-// Updated: app/src/main/kotlin/com/example/phon_krisha/MainActivity.kt
+// MainActivity.kt
 package com.example.phon_krisha
 
 import android.os.Bundle
@@ -22,12 +22,13 @@ import com.example.phon_krisha.screens.home.AdDetailScreen
 import com.example.phon_krisha.screens.home.HomeScreen
 import com.example.phon_krisha.screens.profile.ProfileScreen
 import com.example.phon_krisha.apistate.AuthState
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+
         AuthState.restore(this)
+
 
         setContent {
             MaterialTheme {

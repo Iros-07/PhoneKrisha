@@ -1,12 +1,10 @@
-// Updated: app/src/main/kotlin/com/example/phon_krisha/screens/add/AddOrEditAdScreen.kt
-
+//AddOrEditAdScreen.kt
 package com.example.phon_krisha.screens.add
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,9 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.phon_krisha.network.Ad
 import com.example.phon_krisha.network.ApiClient
@@ -37,6 +33,8 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
 import java.io.FileOutputStream
+import android.util.Log
+import java.io.IOException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,17 +47,16 @@ fun AddOrEditAdScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-
     var isLoading by remember { mutableStateOf(adId != null) }
     var ad by remember { mutableStateOf<Ad?>(null) }
 
-    // Поля формы
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var rooms by remember { mutableStateOf("") }
     var city by remember { mutableStateOf("") }
-    var photoUris by remember { mutableStateOf<MutableList<Uri>>(mutableListOf()) } // Список выбранных Uri
-    var photoUrls by remember { mutableStateOf<MutableList<String>>(mutableListOf()) } // Список загруженных URLs
+    var address by remember { mutableStateOf("") }
+    var photoUris by remember { mutableStateOf<MutableList<Uri>>(mutableListOf()) }
+    var photoUrls by remember { mutableStateOf<MutableList<String>>(mutableListOf()) }
     var price by remember { mutableStateOf("") }
     var adType by remember { mutableStateOf("продажа") }
     var houseType by remember { mutableStateOf("") }
@@ -68,13 +65,13 @@ fun AddOrEditAdScreen(
     var yearBuilt by remember { mutableStateOf("") }
     var area by remember { mutableStateOf("") }
     var complex by remember { mutableStateOf("") }
+    var lat by remember { mutableStateOf<Double?>(null) }
+    var lon by remember { mutableStateOf<Double?>(null) }
 
-    // Ошибки валидации
     var titleError by remember { mutableStateOf(false) }
     var cityError by remember { mutableStateOf(false) }
     var priceError by remember { mutableStateOf(false) }
 
-    // Загрузка существующего объявления при редактировании
     LaunchedEffect(adId) {
         if (adId != null) {
             try {
@@ -84,7 +81,8 @@ fun AddOrEditAdScreen(
                 description = loadedAd.description ?: ""
                 rooms = loadedAd.rooms.toString()
                 city = loadedAd.city
-                photoUrls = loadedAd.photos?.toMutableList() ?: mutableListOf() // Загружаем существующие фото
+                address = loadedAd.address ?: ""
+                photoUrls = loadedAd.photos?.toMutableList() ?: mutableListOf()
                 price = loadedAd.price.toString()
                 adType = loadedAd.ad_type
                 houseType = loadedAd.house_type
@@ -93,6 +91,8 @@ fun AddOrEditAdScreen(
                 yearBuilt = loadedAd.year_built.toString()
                 area = loadedAd.area.toString()
                 complex = loadedAd.complex ?: ""
+                lat = loadedAd.lat
+                lon = loadedAd.lon
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Ошибка загрузки объявления: ${e.message}")
             } finally {
@@ -103,32 +103,50 @@ fun AddOrEditAdScreen(
         }
     }
 
-    // Выбор нескольких фото из галереи
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia()
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
     ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+
         photoUris.addAll(uris)
+
         scope.launch {
             uris.forEach { uri ->
                 try {
-                    val file = File(context.cacheDir, "ad_photo_${System.currentTimeMillis()}.jpg")
+                    val timestamp = System.currentTimeMillis()
+                    val file = File(context.cacheDir, "ad_photo_$timestamp.jpg")
+
                     context.contentResolver.openInputStream(uri)?.use { input ->
                         FileOutputStream(file).use { output ->
                             input.copyTo(output)
                         }
+                    } ?: run {
+                        throw IOException("Не удалось открыть input stream для Uri")
                     }
+
                     val requestFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
                     val body = MultipartBody.Part.createFormData("photo", file.name, requestFile)
+
                     val response = ApiClient.api.uploadPhoto(body)
-                    val url = response["url"]
-                    if (url != null) {
-                        photoUrls.add(url)
+
+                    val uploadedUrl = response["url"]
+                    if (uploadedUrl != null) {
+                        val filename = uploadedUrl.substringAfterLast("/static/photos/")
+                        photoUrls.add(filename)
+                    } else {
+                        snackbarHostState.showSnackbar("Сервер не вернул URL фото")
                     }
+
+                    file.delete()
                 } catch (e: Exception) {
-                    snackbarHostState.showSnackbar("Ошибка загрузки фото: ${e.message}")
+                    Log.e("PhotoUpload", "Ошибка загрузки фото", e)
+                    snackbarHostState.showSnackbar(
+                        "Не удалось загрузить фото: ${e.localizedMessage ?: "Неизвестная ошибка"}"
+                    )
                 }
             }
-            photoUris.clear() // Очищаем после загрузки
+
+            photoUris.clear()
         }
     }
 
@@ -146,9 +164,7 @@ fun AddOrEditAdScreen(
                         titleError = title.isBlank()
                         cityError = city.isBlank()
                         priceError = price.isBlank()
-
                         if (titleError || cityError || priceError) return@IconButton
-
                         scope.launch {
                             val newAd = Ad(
                                 id = adId ?: 0,
@@ -157,7 +173,8 @@ fun AddOrEditAdScreen(
                                 user_id = userId,
                                 rooms = rooms.toIntOrNull() ?: 0,
                                 city = city,
-                                photos = photoUrls, // Список URLs
+                                address = address,
+                                photos = photoUrls,
                                 price = price.toLongOrNull() ?: 0,
                                 ad_type = adType,
                                 house_type = houseType,
@@ -165,7 +182,9 @@ fun AddOrEditAdScreen(
                                 floors_in_house = floorsInHouse.toIntOrNull() ?: 0,
                                 year_built = yearBuilt.toIntOrNull() ?: 0,
                                 area = area.toDoubleOrNull() ?: 0.0,
-                                complex = complex
+                                complex = complex,
+                                lat = lat,
+                                lon = lon
                             )
                             try {
                                 if (adId != null) {
@@ -194,7 +213,6 @@ fun AddOrEditAdScreen(
             }
             return@Scaffold
         }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -203,7 +221,6 @@ fun AddOrEditAdScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Показ существующих фото с возможностью удаления
             if (photoUrls.isNotEmpty()) {
                 LazyRow(
                     modifier = Modifier
@@ -231,9 +248,7 @@ fun AddOrEditAdScreen(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-
             Spacer(modifier = Modifier.height(16.dp))
-
             Button(
                 onClick = { photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                 modifier = Modifier.fillMaxWidth()
@@ -242,10 +257,7 @@ fun AddOrEditAdScreen(
                 Spacer(Modifier.width(8.dp))
                 Text("Добавить фото")
             }
-
             Spacer(modifier = Modifier.height(24.dp))
-
-            // Основные поля
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
@@ -254,9 +266,7 @@ fun AddOrEditAdScreen(
                 supportingText = { if (titleError) Text("Обязательное поле") else null },
                 modifier = Modifier.fillMaxWidth()
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
@@ -264,9 +274,7 @@ fun AddOrEditAdScreen(
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth()
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = price,
                 onValueChange = { price = it.filter { char -> char.isDigit() } },
@@ -276,9 +284,7 @@ fun AddOrEditAdScreen(
                 modifier = Modifier.fillMaxWidth(),
                 prefix = { Text("₸ ") }
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = city,
                 onValueChange = { city = it },
@@ -287,18 +293,21 @@ fun AddOrEditAdScreen(
                 supportingText = { if (cityError) Text("Обязательное поле") else null },
                 modifier = Modifier.fillMaxWidth()
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                label = { Text("Адрес") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = rooms,
                 onValueChange = { rooms = it.filter { char -> char.isDigit() } },
                 label = { Text("Количество комнат") },
                 modifier = Modifier.fillMaxWidth()
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             // Дополнительные поля
             OutlinedTextField(
                 value = adType,
@@ -306,18 +315,14 @@ fun AddOrEditAdScreen(
                 label = { Text("Тип объявления (продажа/аренда)") },
                 modifier = Modifier.fillMaxWidth()
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = houseType,
                 onValueChange = { houseType = it },
                 label = { Text("Тип жилья") },
                 modifier = Modifier.fillMaxWidth()
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -335,9 +340,7 @@ fun AddOrEditAdScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -355,17 +358,15 @@ fun AddOrEditAdScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
-
             Spacer(modifier = Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = complex,
                 onValueChange = { complex = it },
                 label = { Text("Название ЖК / Комплекс") },
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(modifier = Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

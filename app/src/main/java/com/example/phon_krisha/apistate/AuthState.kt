@@ -1,4 +1,4 @@
-// Updated: app/src/main/kotlin/com/example/phon_krisha/apistate/AuthState.kt
+//AuthState.kt
 package com.example.phon_krisha.apistate
 
 import android.content.Context
@@ -12,7 +12,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
-// Расширение DataStore (обязательно!)
 private val Context.userDataStore: DataStore<Preferences> by preferencesDataStore(name = "user_prefs")
 
 private val USER_ID_KEY = intPreferencesKey("user_id")
@@ -25,7 +24,6 @@ object AuthState {
 
     var isGuest = false
 
-    // Сохраняем ID
     suspend fun saveUserId(context: Context, userId: Int) {
         context.userDataStore.edit { prefs ->
             prefs[USER_ID_KEY] = userId
@@ -35,7 +33,6 @@ object AuthState {
         isGuest = false
     }
 
-    // Сохраняем как гость
     suspend fun saveAsGuest(context: Context) {
         context.userDataStore.edit { prefs ->
             prefs.remove(USER_ID_KEY)
@@ -45,14 +42,12 @@ object AuthState {
         isGuest = true
     }
 
-    // Загружаем при старте приложения
     fun restore(context: Context) = runBlocking {
         val prefs = context.userDataStore.data.first()
         currentUserId.value = prefs[USER_ID_KEY]
         isGuest = prefs[IS_GUEST_KEY] ?: false
     }
 
-    // Очищаем при выходе
     suspend fun clearUserId(context: Context) {
         context.userDataStore.edit { prefs ->
             prefs.remove(USER_ID_KEY)
